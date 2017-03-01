@@ -71,10 +71,25 @@ def unpool(net, mask, stride):
     return ret
 
 
-def upsample(net, stride):
+def upsample(net, stride, mode='ZEROS'):
+  """
+  Imitate reverse operation of Max-Pooling by either placing original max values
+  into a fixed postion of upsampled cell:
+  [0.9] =>[[.9, 0],   (stride=2)
+           [ 0, 0]]
+  or copying the value into each cell:
+  [0.9] =>[[.9, .9],  (stride=2)
+           [ .9, .9]]
+
+  :param net: 4D input tensor with [batch_size, width, heights, channels] axis
+  :param stride:
+  :param mode: string 'ZEROS' or 'COPY' indicating which value to use for undefined cells
+  :return:  4D tensor of size [batch_size, width*stride, heights*stride, channels]
+  """
+  assert mode in ['COPY', 'ZEROS']
   with tf.name_scope('Upsampling'):
-    net = _upsample_along_axis(net, 2, stride, mode='ZEROS')
-    net = _upsample_along_axis(net, 1, stride, mode='ZEROS')
+    net = _upsample_along_axis(net, 2, stride, mode=mode)
+    net = _upsample_along_axis(net, 1, stride, mode=mode)
     return net
 
 
@@ -141,7 +156,7 @@ class WhatWhereAutoencoder():
     train = optimizer.minimize(l2rec)
     return train, encode, decode
 
-  def fetch_datasets(self):
+  def fetch_dataset(self):
     mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
     self.dataset = mnist.train.images.reshape((55000, 28, 28, 1))
     self._batch_shape = [FLAGS.batch_size, 28, 28, 1]
@@ -161,14 +176,16 @@ class WhatWhereAutoencoder():
   # TRAIN
 
   def train(self, epochs_to_train=5):
-    self.fetch_datasets()
+    self.fetch_dataset()
 
-    input = tf.placeholder(tf.float32, self._batch_shape, name='input')
     self._current_step = tf.Variable(0, trainable=False, name='global_step')
     self._step = tf.assign(self._current_step, self._current_step + 1)
 
-    train, encode, decode = self.build_mnist_model(input)
-    naive_train, naive_encode, naive_decode = self.build_mnist_model(input, naive=True)
+    # build models
+    input = tf.placeholder(tf.float32, self._batch_shape, name='input')
+    train, encode, decode = self.build_mnist_model(input)  # Autoencoder using Where information
+    naive_train, naive_encode, naive_decode = self.build_mnist_model(input, naive=True)  # regular Autoencoder
+    # build summary with decode images
     stitched_decodings = tf.concat((input, decode, naive_decode), axis=2)
     decoding_summary_op = tf.summary.image('source/whatwhere/stacked', stitched_decodings)
 

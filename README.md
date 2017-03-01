@@ -8,8 +8,18 @@ This project contains Tensorflow implementation of [Stacked What-Where Auto-enco
 - [x] Fixed-position upsampling with element copies
 - [ ] Custom network architecture interpreter as in original paper to configure network with a single line i.e. '(16)5c-(32)3c-Xp'
 
-![Output example](https://github.com/yselivonchyk/Tensorflow_WhatWhereAutoencoder/docs/tensorboard.png)
+## Outputs
+Run tensorboard for visualization:
+```bash
+tensorboard --logdir=./tmp/
+```
+
+![Output example](https://github.com/yselivonchyk/Tensorflow_WhatWhereAutoencoder/blob/master/docs/tensorboard.png)
+
 Picture above shows output images for original mnist image (left), decoding of what-where autoecoder (center), decoding of convolutional autoencoder with naive upsampling (right) while using stride=7. Picture repeat the experiment of the original paper.
+
+![Model graph](https://github.com/yselivonchyk/Tensorflow_WhatWhereAutoencoder/blob/master/docs/graph.png)
+
 
 ####Dependencies
 * Python 3.5
@@ -19,4 +29,11 @@ Picture above shows output images for original mnist image (left), decoding of w
 
 ```bash
 pip3 install tensorflow-gpu numpy
+```
+
+####Running model
+
+Running learning script:
+```bash
+python3 WhatWhereAutoencoder.py --batch_size=128 --max_epochs=2 --pool_size=7
 ```
