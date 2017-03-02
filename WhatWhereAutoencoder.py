@@ -20,16 +20,6 @@ tf.app.flags.DEFINE_float('learning_rate', 0.0001, 'Create visualization of ')
 FLAGS = tf.app.flags.FLAGS
 
 
-def _get_stats_template():
-  return {
-    'batch': [],
-    'input': [],
-    'encoding': [],
-    'reconstruction': [],
-    'total_loss': 0,
-  }
-
-
 def max_pool_with_argmax(net, stride):
   """
   Tensorflow default implementation does not provide gradient operation on max_pool_with_argmax
@@ -119,41 +109,43 @@ class WhatWhereAutoencoder():
   _step = None
   _current_step = None
 
-  def __init__(self,
-               weight_init=None,
-               optimizer=tf.train.AdamOptimizer):
-    self._weight_init = weight_init
-    self._optimizer_constructor = optimizer
-
   def get_epoch_size(self):
     return self.num_inputs/FLAGS.batch_size
 
   def get_image_shape(self):
     return self._batch_shape[2:]
 
-  def build_mnist_model(self, input, naive=False):
+  def build_mnist_model(self, input, use_unpooling):
+    """
+    Build autoencoder model for mnist dataset as described in the Stacked What-Where autoencoders paper
+
+    :param input: 4D tensor of source data of shae [batch_size, w, h, channels]
+    :param use_unpooling: indicate whether unpooling layer should be used instead of naive upsampling
+    :return: tuple of tensors:
+      train - train operation
+      encode - bottleneck tensor of the autoencoder network
+      decode - reconstruction of the input
+    """
     # Encoder. (16)5c-(32)3c-Xp
     net = slim.conv2d(input, 16, [5, 5])
     net = slim.conv2d(net, 32, [3, 3])
-    if not naive:
-      print("UNPOOL MODE")
-      print(net)
+
+    if use_unpooling:
       encode, mask = max_pool_with_argmax(net, FLAGS.pool_size)
       net = unpool(encode, mask, stride=FLAGS.pool_size)
     else:
       encode = slim.max_pool2d(net, kernel_size=[FLAGS.pool_size, FLAGS.pool_size], stride=FLAGS.pool_size)
-      print(encode)
       net = upsample(encode, stride=FLAGS.pool_size)
 
+    # Decoder
     net = slim.conv2d_transpose(net, 16, [3, 3])
     net = slim.conv2d_transpose(net, 1, [5, 5])
     decode = net
 
-    l2rec = tf.nn.l2_loss(slim.flatten(input) - slim.flatten(net))
+    loss_l2 = tf.nn.l2_loss(slim.flatten(input) - slim.flatten(net))
 
     # Optimizer
-    optimizer = self._optimizer_constructor(learning_rate=FLAGS.learning_rate)
-    train = optimizer.minimize(l2rec)
+    train = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate).minimize(loss_l2)
     return train, encode, decode
 
   def fetch_dataset(self):
@@ -183,8 +175,8 @@ class WhatWhereAutoencoder():
 
     # build models
     input = tf.placeholder(tf.float32, self._batch_shape, name='input')
-    train, encode, decode = self.build_mnist_model(input)  # Autoencoder using Where information
-    naive_train, naive_encode, naive_decode = self.build_mnist_model(input, naive=True)  # regular Autoencoder
+    train, encode, decode = self.build_mnist_model(input, use_unpooling=True)  # Autoencoder using Where information
+    naive_train, naive_encode, naive_decode = self.build_mnist_model(input, use_unpooling=False)  # regular Autoencoder
     # build summary with decode images
     stitched_decodings = tf.concat((input, decode, naive_decode), axis=2)
     decoding_summary_op = tf.summary.image('source/whatwhere/stacked', stitched_decodings)
