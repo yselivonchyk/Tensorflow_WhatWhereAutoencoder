@@ -1,4 +1,4 @@
-#What-Where autoencoder. Tensorflow
+# What-Where autoencoder. Tensorflow
 
 This project contains Tensorflow implementation of [Stacked What-Where Auto-encoders](https://arxiv.org/abs/1506.02351). Implementation uses transposed convolutions provided by tensorflow and custom upsampling and unpooling code.
 
@@ -21,7 +21,7 @@ Picture above shows output images for original mnist image (left), decoding of w
 ![Model graph](https://github.com/yselivonchyk/Tensorflow_WhatWhereAutoencoder/blob/master/docs/graph.png)
 
 
-####Dependencies
+#### Dependencies
 * Python 3.5
 * Tensorflow 1.0 with GPU support
 * Numpy
@@ -31,7 +31,7 @@ Picture above shows output images for original mnist image (left), decoding of w
 pip3 install tensorflow-gpu numpy
 ```
 
-####Running model
+#### Running model
 
 Running learning script:
 ```bash
