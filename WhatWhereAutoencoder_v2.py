@@ -2,22 +2,19 @@ from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 import numpy as np
 import time
-import tensorflow.contrib.slim as slim
-from tensorflow.examples.tutorials.mnist import input_data
+import tensorflow.nn as nn
+import tensorflow as tf
 
-tf.app.flags.DEFINE_float('alpha', 0.1, 'Determines the weight of predicted_reconstruction error')
-tf.app.flags.DEFINE_integer('pool_size', 7, 'Determine pooling size in MNIST experiment with reconstruction')
-tf.app.flags.DEFINE_string('data_dir', './data/', 'MNIST dataset location')
+tf.compat.v1.disable_eager_execution()
 
-
-tf.app.flags.DEFINE_string('logdir', '', 'where to save logs.')
-tf.app.flags.DEFINE_integer('max_epochs', 50, 'Train for at most this number of epochs')
-tf.app.flags.DEFINE_integer('report_every', 100, 'Print info every NUM batches')
-tf.app.flags.DEFINE_integer('batch_size', 10, 'Batch size')
-tf.app.flags.DEFINE_float('learning_rate', 0.0001, 'Create visualization of ')
-
-
-FLAGS = tf.app.flags.FLAGS
+class SETTINGS():
+    alpha = 0.1             # Determines the weight of predicted_reconstruction error
+    pool_size = 7           # Determine pooling size in MNIST experiment with reconstruction
+    logdir = ''
+    max_epochs = 50         # Train for at most this number of epochs
+    report_every = 100      # Print info every NUM batches
+    batch_size = 10
+    learning_rate = 0.0001
 
 
 def max_pool_with_argmax(net, stride):
@@ -26,21 +23,21 @@ def max_pool_with_argmax(net, stride):
   Therefore, we use max_pool_with_argmax to extract mask and
   plain max_pool for, eeem... max_pooling.
   """
-  with tf.name_scope('MaxPoolArgMax'):
+  with tf.compat.v1.name_scope('MaxPoolArgMax'):
     _, mask = tf.nn.max_pool_with_argmax(
       net,
       ksize=[1, stride, stride, 1],
       strides=[1, stride, stride, 1],
       padding='SAME')
     mask = tf.stop_gradient(mask)
-    net = slim.max_pool2d(net, kernel_size=[stride, stride],  stride=FLAGS.pool_size)
+    net = tf.nn.max_pool2d(net, ksize=[stride, stride],  strides=SETTINGS.pool_size, padding='SAME')
     return net, mask
 
 
 # Thank you, @https://github.com/Pepslee
 def unpool(net, mask, stride):
   assert mask is not None
-  with tf.name_scope('UnPool2D'):
+  with tf.compat.v1.name_scope('UnPool2D'):
     ksize = [1, stride, stride, 1]
     input_shape = net.get_shape().as_list()
     #  calculation new shape
@@ -54,8 +51,8 @@ def unpool(net, mask, stride):
     feature_range = tf.range(output_shape[3], dtype=tf.int64)
     f = one_like_mask * feature_range
     # transpose indices & reshape update values to one dimension
-    updates_size = tf.size(net)
-    indices = tf.transpose(tf.reshape(tf.stack([b, y, x, f]), [4, updates_size]))
+    updates_size = tf.size(input=net)
+    indices = tf.transpose(a=tf.reshape(tf.stack([b, y, x, f]), [4, updates_size]))
     values = tf.reshape(net, [updates_size])
     ret = tf.scatter_nd(indices, values, output_shape)
     return ret
@@ -77,7 +74,7 @@ def upsample(net, stride, mode='ZEROS'):
   :return:  4D tensor of size [batch_size, width*stride, heights*stride, channels]
   """
   assert mode in ['COPY', 'ZEROS']
-  with tf.name_scope('Upsampling'):
+  with tf.compat.v1.name_scope('Upsampling'):
     net = _upsample_along_axis(net, 2, stride, mode=mode)
     net = _upsample_along_axis(net, 1, stride, mode=mode)
     return net
@@ -100,9 +97,26 @@ def _upsample_along_axis(volume, axis, stride, mode='ZEROS'):
   return volume
 
 
-class WhatWhereAutoencoder():
-  num_inputs = 55000
+def conv2d(inputs, filters, kernel):
+    in_channels = list(inputs.shape)[-1]
+    weight_shape = kernel + [in_channels, filters]
+    filters = tf.Variable(tf.initializers.GlorotUniform()(weight_shape))
+    return tf.nn.conv2d(inputs, filters, strides=[1, 1, 1, 1], padding='SAME')
 
+
+def conv2d_transpose(inputs, filters, kernel):
+    in_shape = list(inputs.shape)
+    in_channels = list(inputs.shape)[-1]
+    weight_shape = kernel + [filters, in_channels]
+    weights = tf.Variable(tf.initializers.GlorotUniform()(weight_shape))
+    return tf.nn.conv2d_transpose(inputs, weights, output_shape=in_shape[:-1] + [filters], strides=[1, 1, 1, 1])
+
+
+def flatten(inputs):
+    return tf.reshape(inputs, [tf.shape(inputs)[0], -1])
+
+
+class WhatWhereAutoencoder():
   dataset = None
   _batch_shape = None
 
@@ -110,7 +124,7 @@ class WhatWhereAutoencoder():
   _current_step = None
 
   def get_epoch_size(self):
-    return self.num_inputs/FLAGS.batch_size
+    return self.dataset.shape[0]/SETTINGS.batch_size
 
   def get_image_shape(self):
     return self._batch_shape[2:]
@@ -127,43 +141,51 @@ class WhatWhereAutoencoder():
       decode - reconstruction of the input
     """
     # Encoder. (16)5c-(32)3c-Xp
-    net = slim.conv2d(input, 16, [5, 5])
-    net = slim.conv2d(net, 32, [3, 3])
+    net = conv2d(input, 16, [5, 5])
+    net = conv2d(net, 32, [3, 3])
 
     if use_unpooling:
-      encode, mask = max_pool_with_argmax(net, FLAGS.pool_size)
-      net = unpool(encode, mask, stride=FLAGS.pool_size)
+      encode, mask = max_pool_with_argmax(net, SETTINGS.pool_size)
+      net = unpool(encode, mask, stride=SETTINGS.pool_size)
     else:
-      encode = slim.max_pool2d(net, kernel_size=[FLAGS.pool_size, FLAGS.pool_size], stride=FLAGS.pool_size)
-      net = upsample(encode, stride=FLAGS.pool_size)
+      encode = tf.nn.max_pool2d(
+            net,
+            ksize=[SETTINGS.pool_size, SETTINGS.pool_size],
+            strides=SETTINGS.pool_size,
+            padding='SAME'
+            )
+      net = upsample(encode, stride=SETTINGS.pool_size)
 
     # Decoder
-    net = slim.conv2d_transpose(net, 16, [3, 3])
-    net = slim.conv2d_transpose(net, 1, [5, 5])
+    net = conv2d_transpose(net, 16, [3, 3])
+    net = conv2d_transpose(net, 1, [5, 5])
     decode = net
 
-    loss_l2 = tf.nn.l2_loss(slim.flatten(input) - slim.flatten(net))
+
+    loss_l2 = tf.nn.l2_loss(flatten(input) - flatten(net))
 
     # Optimizer
-    train = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate).minimize(loss_l2)
+    #tf.optimizers.Adam
+    train = tf.compat.v1.train.AdamOptimizer(learning_rate=SETTINGS.learning_rate).minimize(loss_l2)
     return train, encode, decode
 
   def fetch_dataset(self):
-    mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
-    self.dataset = mnist.train.images.reshape((55000, 28, 28, 1))
-    self._batch_shape = [FLAGS.batch_size, 28, 28, 1]
+    mnist = tf.keras.datasets.mnist
+    (train_images, _), (_, _) = mnist.load_data() # we only need train images here [60000, 28, 28]
+    if len(train_images.shape) == 3: train_images = train_images.reshape(list(train_images.shape) + [1])
+    self.dataset = train_images
+    self._batch_shape = [SETTINGS.batch_size, 28, 28, 1]
 
   def _batch_generator(self, shuffle=True):
     """Returns BATCH_SIZE of images"""
-    dataset = self.dataset
-    self.permutation = np.arange(len(dataset) - 2)
+    self.permutation = np.arange(len(self.dataset) - 2)
     self.permutation = self.permutation if not shuffle else np.random.permutation(self.permutation)
 
-    total_batches = int(len(self.permutation) / FLAGS.batch_size)
+    total_batches = int(len(self.permutation) / SETTINGS.batch_size)
 
     for i in range(total_batches):
-      batch_indexes = self.permutation[i * FLAGS.batch_size:(i + 1) * FLAGS.batch_size]
-      yield dataset[batch_indexes]
+      batch_indexes = self.permutation[i * SETTINGS.batch_size:(i + 1) * SETTINGS.batch_size]
+      yield self.dataset[batch_indexes]
 
   # TRAIN
 
@@ -171,18 +193,18 @@ class WhatWhereAutoencoder():
     self.fetch_dataset()
 
     self._current_step = tf.Variable(0, trainable=False, name='global_step')
-    self._step = tf.assign(self._current_step, self._current_step + 1)
+    self._step = tf.compat.v1.assign(self._current_step, self._current_step + 1)
 
     # build models
-    input = tf.placeholder(tf.float32, self._batch_shape, name='input')
+    input = tf.compat.v1.placeholder(tf.float32, self._batch_shape, name='input')
     train, encode, decode = self.build_mnist_model(input, use_unpooling=True)  # Autoencoder using Where information
     naive_train, naive_encode, naive_decode = self.build_mnist_model(input, use_unpooling=False)  # regular Autoencoder
     # build summary with decode images
     stitched_decodings = tf.concat((input, decode, naive_decode), axis=2)
-    decoding_summary_op = tf.summary.image('source/whatwhere/stacked', stitched_decodings)
+    decoding_summary_op = tf.compat.v1.summary.image('source/whatwhere/stacked', stitched_decodings)
 
-    with tf.Session() as sess:
-      sess.run(tf.global_variables_initializer())
+    with tf.compat.v1.Session() as sess:
+      sess.run(tf.compat.v1.global_variables_initializer())
       self._register_training_start(sess)
 
       # MAIN LOOP
@@ -196,17 +218,17 @@ class WhatWhereAutoencoder():
         self._register_epoch(current_epoch, epochs_to_train, time.time() - start, sess)
 
   def _register_training_start(self, sess):
-    self.summary_writer = tf.summary.FileWriter('./tmp/', sess.graph)
+    self.summary_writer = tf.compat.v1.summary.FileWriter('./tmp/', sess.graph)
 
   def _register_batch(self, batch, decoding_summary, step):
-    if step % self.get_epoch_size() % FLAGS.report_every == 0:
-      print('\r step: %6d/%d' % (step, self.get_epoch_size()), end='')
+    if step % self.get_epoch_size() % SETTINGS.report_every == 0:
+      print('\r step: %6d/%4d' % (step, self.get_epoch_size()), end='')
       self.summary_writer.add_summary(decoding_summary)
 
   def _register_epoch(self, epoch, total_epochs, elapsed, sess):
-    print(' Epoch: %2d/%d' % (epoch+1, total_epochs))
+    print(' Epoch: %2d/%2d' % (epoch+1, total_epochs))
 
 
 if __name__ == '__main__':
   model = WhatWhereAutoencoder()
-  model.train(FLAGS.max_epochs)
+  model.train(SETTINGS.max_epochs)
