@@ -3,7 +3,6 @@ import tensorflow as tf
 import numpy as np
 import time
 import tensorflow.contrib.slim as slim
-from tensorflow.examples.tutorials.mnist import input_data
 
 tf.app.flags.DEFINE_float('alpha', 0.1, 'Determines the weight of predicted_reconstruction error')
 tf.app.flags.DEFINE_integer('pool_size', 7, 'Determine pooling size in MNIST experiment with reconstruction')
@@ -101,7 +100,7 @@ def _upsample_along_axis(volume, axis, stride, mode='ZEROS'):
 
 
 class WhatWhereAutoencoder():
-  num_inputs = 55000
+  num_inputs = None
 
   dataset = None
   _batch_shape = None
@@ -149,8 +148,11 @@ class WhatWhereAutoencoder():
     return train, encode, decode
 
   def fetch_dataset(self):
-    mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
-    self.dataset = mnist.train.images.reshape((55000, 28, 28, 1))
+    mnist = tf.keras.datasets.mnist
+    (train_images, _), (_, _) = mnist.load_data() # we only need train images here [60000, 28, 28]
+    if len(train_images.shape) == 3: train_images = train_images.reshape(list(train_images.shape) + [1])
+    self.dataset = train_images
+    self.num_inputs = len(train_images)
     self._batch_shape = [FLAGS.batch_size, 28, 28, 1]
 
   def _batch_generator(self, shuffle=True):
