@@ -1,5 +1,12 @@
+#title           :pooling.py
+#description     :implementation of max_pooling_with_argmax and unpooling for tensorflow and keras
+#author          :yselivonchyk
+#date            :20190405
+#modeldetails    :non-sequential model, parallel training as a multiple output model
+
 import tensorflow as tf
 import tensorflow.keras as keras
+import tensorflow.keras.backend as K
 from tensorflow.python.keras.engine.base_layer import Layer
 
 

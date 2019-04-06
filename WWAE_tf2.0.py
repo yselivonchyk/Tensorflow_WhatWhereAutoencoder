@@ -1,3 +1,9 @@
+# title           :WWAE_tf2.0.py
+# description     :Implementation of What-Whaere Autoencoder with help of Tensorflow 2.0+
+# author          :yselivonchyk
+# date            :20190405
+# modeldetails    :non-sequential model, parallel training as a multiple output model
+
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 import numpy as np
@@ -7,14 +13,15 @@ import tensorflow as tf
 
 tf.compat.v1.disable_eager_execution()
 
+
 class SETTINGS():
-    alpha = 0.1             # Determines the weight of predicted_reconstruction error
-    pool_size = 7           # Determine pooling size in MNIST experiment with reconstruction
-    logdir = ''
-    max_epochs = 50         # Train for at most this number of epochs
-    report_every = 100      # Print info every NUM batches
-    batch_size = 10
-    learning_rate = 0.0001
+  alpha = 0.1  # Determines the weight of predicted_reconstruction error
+  pool_size = 7  # Determine pooling size in MNIST experiment with reconstruction
+  logdir = './log/WWAE20'
+  max_epochs = 50  # Train for at most this number of epochs
+  report_every = 100  # Print info every NUM batches
+  batch_size = 10
+  learning_rate = 0.0001
 
 
 def max_pool_with_argmax(net, stride):
@@ -30,7 +37,7 @@ def max_pool_with_argmax(net, stride):
       strides=[1, stride, stride, 1],
       padding='SAME')
     mask = tf.stop_gradient(mask)
-    net = tf.nn.max_pool2d(net, ksize=[stride, stride],  strides=SETTINGS.pool_size, padding='SAME')
+    net = tf.nn.max_pool2d(net, ksize=[stride, stride], strides=SETTINGS.pool_size, padding='SAME')
     return net, mask
 
 
@@ -91,29 +98,29 @@ def _upsample_along_axis(volume, axis, stride, mode='ZEROS'):
 
   padding = tf.zeros(shape, dtype=volume.dtype) if mode == 'ZEROS' else volume
   parts = [volume] + [padding for _ in range(stride - 1)]
-  volume = tf.concat(parts, min(axis+1, len(shape)-1))
+  volume = tf.concat(parts, min(axis + 1, len(shape) - 1))
 
   volume = tf.reshape(volume, target_shape)
   return volume
 
 
 def conv2d(inputs, filters, kernel):
-    in_channels = list(inputs.shape)[-1]
-    weight_shape = kernel + [in_channels, filters]
-    filters = tf.Variable(tf.initializers.GlorotUniform()(weight_shape))
-    return tf.nn.conv2d(inputs, filters, strides=[1, 1, 1, 1], padding='SAME')
+  in_channels = list(inputs.shape)[-1]
+  weight_shape = kernel + [in_channels, filters]
+  filters = tf.Variable(tf.initializers.GlorotUniform()(weight_shape))
+  return tf.nn.conv2d(inputs, filters, strides=[1, 1, 1, 1], padding='SAME')
 
 
 def conv2d_transpose(inputs, filters, kernel):
-    in_shape = list(inputs.shape)
-    in_channels = list(inputs.shape)[-1]
-    weight_shape = kernel + [filters, in_channels]
-    weights = tf.Variable(tf.initializers.GlorotUniform()(weight_shape))
-    return tf.nn.conv2d_transpose(inputs, weights, output_shape=in_shape[:-1] + [filters], strides=[1, 1, 1, 1])
+  in_shape = list(inputs.shape)
+  in_channels = list(inputs.shape)[-1]
+  weight_shape = kernel + [filters, in_channels]
+  weights = tf.Variable(tf.initializers.GlorotUniform()(weight_shape))
+  return tf.nn.conv2d_transpose(inputs, weights, output_shape=in_shape[:-1] + [filters], strides=[1, 1, 1, 1])
 
 
 def flatten(inputs):
-    return tf.reshape(inputs, [tf.shape(inputs)[0], -1])
+  return tf.reshape(inputs, [tf.shape(inputs)[0], -1])
 
 
 class WhatWhereAutoencoder():
@@ -124,7 +131,7 @@ class WhatWhereAutoencoder():
   _current_step = None
 
   def get_epoch_size(self):
-    return self.dataset.shape[0]/SETTINGS.batch_size
+    return self.dataset.shape[0] / SETTINGS.batch_size
 
   def get_image_shape(self):
     return self._batch_shape[2:]
@@ -149,11 +156,11 @@ class WhatWhereAutoencoder():
       net = unpool(encode, mask, stride=SETTINGS.pool_size)
     else:
       encode = tf.nn.max_pool2d(
-            net,
-            ksize=[SETTINGS.pool_size, SETTINGS.pool_size],
-            strides=SETTINGS.pool_size,
-            padding='SAME'
-            )
+        net,
+        ksize=[SETTINGS.pool_size, SETTINGS.pool_size],
+        strides=SETTINGS.pool_size,
+        padding='SAME'
+      )
       net = upsample(encode, stride=SETTINGS.pool_size)
 
     # Decoder
@@ -161,17 +168,16 @@ class WhatWhereAutoencoder():
     net = conv2d_transpose(net, 1, [5, 5])
     decode = net
 
-
     loss_l2 = tf.nn.l2_loss(flatten(input) - flatten(net))
 
     # Optimizer
-    #tf.optimizers.Adam
+    # tf.optimizers.Adam
     train = tf.compat.v1.train.AdamOptimizer(learning_rate=SETTINGS.learning_rate).minimize(loss_l2)
     return train, encode, decode
 
   def fetch_dataset(self):
     mnist = tf.keras.datasets.mnist
-    (train_images, _), (_, _) = mnist.load_data() # we only need train images here [60000, 28, 28]
+    (train_images, _), (_, _) = mnist.load_data()  # we only need train images here [60000, 28, 28]
     if len(train_images.shape) == 3: train_images = train_images.reshape(list(train_images.shape) + [1])
     self.dataset = train_images
     self._batch_shape = [SETTINGS.batch_size, 28, 28, 1]
@@ -208,25 +214,25 @@ class WhatWhereAutoencoder():
       self._register_training_start(sess)
 
       # MAIN LOOP
+      start = time.time()
       for current_epoch in xrange(epochs_to_train):
-        start = time.time()
         for batch in self._batch_generator():
           _, _, decoding_summary, step = sess.run(
             [train, naive_train, decoding_summary_op, self._step],
             feed_dict={input: batch})
-          self._register_batch(batch, decoding_summary, step)
-        self._register_epoch(current_epoch, epochs_to_train, time.time() - start, sess)
+          self._register_batch(batch, decoding_summary, step, time.time() - start)
+        self._register_epoch(current_epoch, epochs_to_train)
 
   def _register_training_start(self, sess):
     self.summary_writer = tf.compat.v1.summary.FileWriter('./tmp/', sess.graph)
 
-  def _register_batch(self, batch, decoding_summary, step):
+  def _register_batch(self, batch, decoding_summary, step, elapsed):
     if step % self.get_epoch_size() % SETTINGS.report_every == 0:
-      print('\r step: %6d/%4d' % (step, self.get_epoch_size()), end='')
+      print('\r step: %6d/%4d \tbatch_per_sec: %04.1f' % (step, self.get_epoch_size(), step / elapsed), end='')
       self.summary_writer.add_summary(decoding_summary)
 
-  def _register_epoch(self, epoch, total_epochs, elapsed, sess):
-    print(' Epoch: %2d/%2d' % (epoch+1, total_epochs))
+  def _register_epoch(self, epoch, total_epochs):
+    print(' Epoch: %2d/%2d' % (epoch + 1, total_epochs))
 
 
 if __name__ == '__main__':
