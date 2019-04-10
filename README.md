@@ -2,7 +2,13 @@
 
 This project contains Tensorflow implementation of [Stacked What-Where Auto-encoders](https://arxiv.org/abs/1506.02351). Implementation uses transposed convolutions provided by tensorflow and custom upsampling and unpooling code.
 
-**Note:** As of now, unpooling code is not working with Tensorflow versions 1.13 and 2.0.0-alpha (the latest versions in pip) due to a bug in scatter_nd. It has been fixed in nightly versions and should be released with any next Tensorflow package.
+**Note:** As of now, unpooling code is not working with Tensorflow versions 1.13 and 2.0.0-alpha (the latest versions in pip) due to a bug in scatter_nd. It has been fixed in nightly versions and should be released with any next Tensorflow package. Please, use one of the next tensorflow versions:
+```shell
+$ pip install tf-nightly-2.0-preview 
+$ pip install tf-nightly-gpu-2.0-preview
+$ pip install tf-nightly # 1.14 preview
+$ pip install tensorflow-gpu==1.12.0
+```
 
 ## Features
 - [x] Unpooling layer (implemented by @Peepslee [forum](https://github.com/tensorflow/tensorflow/issues/2169))
