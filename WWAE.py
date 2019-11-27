@@ -65,7 +65,7 @@ class WhatWhereAutoencoder():
 
       # TRAIN
 
-    def build_mnist_model(self, input, use_unpooling):
+  def build_mnist_model(self, input, use_unpooling):
       """
       Build autoencoder model for mnist dataset as described in the Stacked What-Where autoencoders paper
 
