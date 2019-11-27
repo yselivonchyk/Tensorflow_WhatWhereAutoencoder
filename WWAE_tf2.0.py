@@ -8,7 +8,6 @@ from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 import numpy as np
 import time
-import tensorflow.nn as nn
 import tensorflow as tf
 
 tf.compat.v1.disable_eager_execution()
